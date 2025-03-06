@@ -7,67 +7,138 @@ import (
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )
 
-// SmartContract defines the Insurance Claim contract
+// SmartContract for Decentralized Identity Management
 type SmartContract struct {
 	contractapi.Contract
 }
 
-// User represents a policyholder or insurer
-type User struct {
-	UserID   string `json:"userID"`
-	Name     string `json:"name"`
-	UserType string `json:"userType"` // "Policyholder" or "Insurer"
+// DID represents a decentralized identity
+type DID struct {
+	DID         string `json:"did"`
+	Name        string `json:"name"`
+	Credentials string `json:"credentials"`
+	Verified    bool   `json:"verified"`
 }
 
-// Claim represents an insurance claim
-type Claim struct {
-	ClaimID     string `json:"claimID"`
-	UserID      string `json:"userID"`
-	ClaimAmount int    `json:"claimAmount"`
-	ClaimReason string `json:"claimReason"`
-	Status      string `json:"status"` // "Pending", "Approved", "Rejected"
-	RejectionReason string `json:"rejectionReason,omitempty"`
+// CreateDID creates a new decentralized identity
+func (s *SmartContract) CreateDID(ctx contractapi.TransactionContextInterface, did string, name string, credentials string) error {
+	existingDID, err := ctx.GetStub().GetState(did)
+	if err != nil {
+		return fmt.Errorf("failed to read from world state: %v", err)
+	}
+	if len(existingDID) > 0 {
+		return fmt.Errorf("DID already exists")
+	}
+
+	identity := DID{
+		DID:         did,
+		Name:        name,
+		Credentials: credentials,
+		Verified:    false,
+	}
+
+	identityJSON, err := json.Marshal(identity)
+	if err != nil {
+		return err
+	}
+
+	return ctx.GetStub().PutState(did, identityJSON)
 }
 
-// RegisterUser registers a new user (Policyholder or Insurer)
-func (s *SmartContract) RegisterUser(ctx contractapi.TransactionContextInterface, userID string, name string, userType string) error {
-	
+// UpdateCredentials updates the credentials of an existing DID
+func (s *SmartContract) UpdateCredentials(ctx contractapi.TransactionContextInterface, did string, newCredentials string) error {
+	didJSON, err := ctx.GetStub().GetState(did)
+	if err != nil {
+		return fmt.Errorf("failed to read DID: %v", err)
+	}
+	if len(didJSON) == 0 {
+		return fmt.Errorf("DID does not exist")
+	}
+
+	var identity DID
+	err = json.Unmarshal(didJSON, &identity)
+	if err != nil {
+		return err
+	}
+
+	identity.Credentials = newCredentials
+
+	updatedDIDJSON, err := json.Marshal(identity)
+	if err != nil {
+		return err
+	}
+
+	return ctx.GetStub().PutState(did, updatedDIDJSON)
 }
 
-// FileClaim allows a policyholder to file an insurance claim
-func (s *SmartContract) FileClaim(ctx contractapi.TransactionContextInterface, claimID string, userID string, claimAmount int, claimReason string) error {
-	
+// VerifyDID marks a DID as verified
+func (s *SmartContract) VerifyDID(ctx contractapi.TransactionContextInterface, did string) error {
+	didJSON, err := ctx.GetStub().GetState(did)
+	if err != nil {
+		return fmt.Errorf("failed to read DID: %v", err)
+	}
+	if len(didJSON) == 0 {
+		return fmt.Errorf("DID does not exist")
+	}
+
+	var identity DID
+	err = json.Unmarshal(didJSON, &identity)
+	if err != nil {
+		return err
+	}
+
+	identity.Verified = true
+
+	updatedDIDJSON, err := json.Marshal(identity)
+	if err != nil {
+		return err
+	}
+
+	return ctx.GetStub().PutState(did, updatedDIDJSON)
 }
 
-// ApproveClaim allows an insurer to approve a claim
-func (s *SmartContract) ApproveClaim(ctx contractapi.TransactionContextInterface, claimID string) error {
-	
+// RevokeDID removes a DID from the ledger
+func (s *SmartContract) RevokeDID(ctx contractapi.TransactionContextInterface, did string) error {
+	existingDID, err := ctx.GetStub().GetState(did)
+	if err != nil {
+		return fmt.Errorf("failed to read DID: %v", err)
+	}
+	if len(existingDID) == 0 {
+		return fmt.Errorf("DID does not exist")
+	}
+
+	// Remove the DID from state
+	return ctx.GetStub().DelState(did)
 }
 
-// RejectClaim allows an insurer to reject a claim with a reason
-func (s *SmartContract) RejectClaim(ctx contractapi.TransactionContextInterface, claimID string, rejectionReason string) error {
-	
-}
+// GetDID retrieves the details of a DID
+func (s *SmartContract) GetDID(ctx contractapi.TransactionContextInterface, did string) (*DID, error) {
+	didJSON, err := ctx.GetStub().GetState(did)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read DID: %v", err)
+	}
+	if len(didJSON) == 0 {
+		return nil, fmt.Errorf("DID does not exist")
+	}
 
-// GetClaimStatus retrieves the status of a claim
-func (s *SmartContract) GetClaimStatus(ctx contractapi.TransactionContextInterface, claimID string) (*Claim, error) {
-	
-}
+	var identity DID
+	err = json.Unmarshal(didJSON, &identity)
+	if err != nil {
+		return nil, err
+	}
 
-// GetUserClaims retrieves all claims filed by a specific user
-func (s *SmartContract) GetUserClaims(ctx contractapi.TransactionContextInterface, userID string) ([]Claim, error) {
-	
+	return &identity, nil
 }
 
 // Main function to start the chaincode
 func main() {
 	chaincode, err := contractapi.NewChaincode(&SmartContract{})
 	if err != nil {
-		fmt.Printf("Error creating insurance claim chaincode: %s", err)
+		fmt.Printf("Error creating identity management chaincode: %s", err)
 		return
 	}
 
 	if err := chaincode.Start(); err != nil {
-		fmt.Printf("Error starting insurance claim chaincode: %s", err)
+		fmt.Printf("Error starting identity management chaincode: %s", err)
 	}
 }
